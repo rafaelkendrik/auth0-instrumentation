@@ -1,31 +1,23 @@
 #!/bin/bash
 
-MATCHER=${2:-"*"}
-NPM_TAG=${3:-"beta"}
+readonly MATCHER=${2:-"*"}
+readonly NPM_TAG=${3:-"beta"}
 
-NPM_NAME=$(node tools/attribute.js name)
-VERSION=$(node tools/attribute.js version)
+readonly NPM_NAME=$(node tools/attribute.js name)
+readonly VERSION=$(node tools/attribute.js version)
 
-NPM_BIN=$(npm bin)
-STABLE=$($NPM_BIN/semver $VERSION -r "*")
+readonly NPM_EXISTS=$(npm info -s $NPM_NAME@$1 version)
+
+readonly NPM_BIN=$(npm bin)
+readonly STABLE=$($NPM_BIN/semver $VERSION -r "*")
 
 # Enable failing on exit status here because semver exits with 1 when the range
 # doesn't match.
 set -e
 
-new_line()
-{
-  echo ""
-}
-
 verbose()
 {
   echo -e " \033[36m→\033[0m $1"
-}
-
-verbose_item()
-{
-  echo -e " \033[96m∙\033[0m $1"
 }
 
 success()
@@ -33,24 +25,35 @@ success()
   echo -e " \033[1;32m✔︎\033[0m $1"
 }
 
-npm_release()
+publish()
 {
-  verbose "Checking if version $1 of $NPM_NAME is already available in npm…"
+  local version=$1; shift
+  local npm_name=$1; shift
+  local npm_tag=$1; shift
 
-  NPM_EXISTS=$(npm info -s $NPM_NAME@$1 version)
+  local deploy_message="Deploying ${version} to npm"
 
-  if [ ! -z "$NPM_EXISTS" ] && [ "$NPM_EXISTS" == "$1" ]; then
-    verbose "There is already a version $NPM_EXISTS in npm. Skipping npm publish…"
+  if [[ -n "$npm_tag" ]]; then
+    verbose "${deploy_message} with tag ${npm_tag}"
+    npm publish --tag "$npm_tag"
   else
-    if [ ! -z "$STABLE" ]; then
-      verbose "Deploying $1 to npm"
-      npm publish
-    else
-      verbose "Deploying $1 to npm with tag $NPM_TAG"
-      npm publish --tag "$NPM_TAG"
-    fi
-    success "$NPM_NAME uploaded to npm registry"
+    verbose "$deploy_message"
+    npm publish
   fi
+
+  success "${npm_name} uploaded to npm registry"
 }
 
-npm_release "$VERSION"
+verbose "Checking if version ${VERSION} of ${NPM_NAME} is already available in npm…"
+
+if [ -n "$NPM_EXISTS" ] && [ "$NPM_EXISTS" == "$VERSION" ]; then
+  verbose "There is already a version ${NPM_EXISTS} in npm. Skipping npm publish…"
+  exit 0
+fi
+
+if [ -z "$STABLE" ]; then
+  publish "$VERSION" "$NPM_NAME" "$NPM_TAG"
+  exit 0
+fi
+
+publish "$VERSION" "$NPM_NAME"
